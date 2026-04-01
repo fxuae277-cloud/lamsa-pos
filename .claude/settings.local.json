@@ -44,7 +44,11 @@
       "Bash(curl -sv http://localhost:5000/api/payroll/ui/employees)",
       "Bash(netstat -tlnp)",
       "Bash(curl:*)",
-      "Bash(grep -A 20 \"CREATE TABLE.*users\" /home/runner/workspace/migrations/*.sql)"
+      "Bash(grep -A 20 \"CREATE TABLE.*users\" /home/runner/workspace/migrations/*.sql)",
+      "Bash(grep -r \"CREATE TABLE.*settings\\\\|settings\" /home/runner/workspace/migrations/*.sql)",
+      "Bash(file /home/runner/workspace/migrations/*)",
+      "Bash(git show:*)",
+      "Bash(ls /home/runner/workspace/.railway* /home/runner/workspace/railway.json /home/runner/workspace/nixpacks.toml /home/runner/workspace/Procfile)"
     ]
   }
 }
