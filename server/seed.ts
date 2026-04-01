@@ -36,8 +36,70 @@ export async function bootstrapOwner() {
   console.log("Bootstrap owner created: username=owner, password=Owner@12345");
 }
 
+async function ensureBranch() {
+  let [branch] = await db.select().from(branches).limit(1);
+  if (!branch) {
+    [branch] = await db.insert(branches).values({
+      name: "الفرع الرئيسي",
+      address: "",
+      isMain: true,
+    }).returning();
+  }
+  return branch;
+}
+
+export async function seedAdminUser() {
+  // Idempotent: skip if admin already exists
+  const existing = await db.select().from(users).where(eq(users.username, "admin")).limit(1);
+  if (existing.length > 0) return;
+
+  console.log("Admin user not found. Creating default admin...");
+  const branch = await ensureBranch();
+
+  const hashed = await hashPassword("123456");
+  await db.insert(users).values({
+    username: "admin",
+    password: hashed,
+    name: "Admin",
+    role: "admin",
+    branchId: branch.id,
+    terminalName: "POS-1",
+    isActive: true,
+  });
+
+  console.log("Default admin created: username=admin, password=123456");
+}
+
+export async function seedAhmedUser() {
+  // Idempotent: skip if ahmed already exists
+  const existing = await db.select().from(users).where(eq(users.username, "ahmed")).limit(1);
+  if (existing.length > 0) {
+    const ahmed = existing[0];
+    console.log(`[seed] ahmed found: id=${ahmed.id} role=${ahmed.role} isActive=${ahmed.isActive} hashPrefix=${ahmed.password.slice(0, 7)}`);
+    return;
+  }
+
+  console.log("[seed] ahmed not found — creating now");
+  const branch = await ensureBranch();
+
+  const hashed = await hashPassword("owner123");
+  await db.insert(users).values({
+    username: "ahmed",
+    password: hashed,
+    name: "أحمد",
+    role: "owner",
+    branchId: branch.id,
+    terminalName: "POS-2",
+    isActive: true,
+  });
+
+  console.log("[seed] ahmed created: username=ahmed password=owner123");
+}
+
 export async function seedDatabase() {
   await bootstrapOwner();
+  await seedAdminUser();
+  await seedAhmedUser();
   await bootstrapLocations();
 
   const existingBranches = await db.select().from(branches);

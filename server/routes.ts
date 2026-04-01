@@ -64,19 +64,39 @@ export async function registerRoutes(
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
     const { username, password } = parsed.data;
+
+    logger.info("login_attempt", { username, ip: req.ip });
+
     const user = await storage.getUserByUsername(username);
     if (!user) {
       logger.warn("failed_login", { username, reason: "user_not_found", ip: req.ip });
       return res.status(401).json({ message: "اسم المستخدم أو كلمة المرور غير صحيحة" });
     }
+
+    // Detect hash algorithm from stored prefix ($2b$ = bcrypt, $2a$ = old bcrypt)
+    const hashAlgo = user.password.startsWith("$2")
+      ? `bcrypt (prefix=${user.password.slice(0, 7)})`
+      : "unknown";
+    logger.info("login_hash_check", {
+      username,
+      userId: user.id,
+      hashAlgo,
+      isActive: user.isActive,
+      role: user.role,
+    });
+
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
-      logger.warn("failed_login", { username, reason: "wrong_password", ip: req.ip });
+      logger.warn("failed_login", { username, reason: "wrong_password", userId: user.id, hashAlgo, ip: req.ip });
       return res.status(401).json({ message: "اسم المستخدم أو كلمة المرور غير صحيحة" });
     }
+
     if (!user.isActive) {
+      logger.warn("failed_login", { username, reason: "account_disabled", userId: user.id, ip: req.ip });
       return res.status(403).json({ message: "الحساب معطّل" });
     }
+
+    logger.info("login_success", { username, userId: user.id, role: user.role, ip: req.ip });
     req.session.userId = user.id;
     const { password: _, ...safeUser } = user;
     res.json({ user: safeUser });
