@@ -43,7 +43,8 @@
       "Bash(curl -s http://localhost:5000/api/payroll/ui/employees)",
       "Bash(curl -sv http://localhost:5000/api/payroll/ui/employees)",
       "Bash(netstat -tlnp)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(grep -A 20 \"CREATE TABLE.*users\" /home/runner/workspace/migrations/*.sql)"
     ]
   }
 }
