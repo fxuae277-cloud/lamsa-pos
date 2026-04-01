@@ -8,6 +8,17 @@ import path from "path";
  * NOTE: statements run outside of a transaction to support CREATE INDEX CONCURRENTLY.
  */
 export async function runMigrations() {
+  // Create the session table inline so connect-pg-simple never needs table.sql
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "session" (
+      "sid"    varchar      NOT NULL COLLATE "default",
+      "sess"   json         NOT NULL,
+      "expire" timestamp(6) NOT NULL
+    ) WITH (OIDS=FALSE);
+    ALTER TABLE "session" ADD CONSTRAINT IF NOT EXISTS session_pkey PRIMARY KEY ("sid");
+    CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS _migrations (
       name       VARCHAR PRIMARY KEY,

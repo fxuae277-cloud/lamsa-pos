@@ -44,7 +44,7 @@ app.use(
   session({
     store: new PgStore({
       conString: process.env.DATABASE_URL,
-      createTableIfMissing: true,
+      createTableIfMissing: false,
     }),
     secret: process.env.SESSION_SECRET || "lamsat-onothah-secret-2024",
     resave: false,
