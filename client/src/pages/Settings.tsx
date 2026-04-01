@@ -1,3 +1,4 @@
+import { getAuthHeaders } from "@/lib/queryClient";
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -250,7 +251,7 @@ export default function Settings() {
 
   const handleDownloadBackup = async (filename: string) => {
     try {
-      const res = await fetch(`/api/settings/backup/download/${filename}`, { credentials: "include" });
+      const res = await fetch(`/api/settings/backup/download/${filename}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("فشل التنزيل");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -281,7 +282,7 @@ export default function Settings() {
   const handleBackup = async () => {
     setBackupLoading(true);
     try {
-      const res = await fetch("/api/exports/backup.json", { credentials: "include" });
+      const res = await fetch("/api/exports/backup.json", { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(t("settings.upload_error"));
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);

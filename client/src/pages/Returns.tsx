@@ -1,3 +1,4 @@
+import { getAuthHeaders } from "@/lib/queryClient";
 import { useState } from "react";
 import { RotateCcw, Search, Plus, Package, Calendar, Eye, FileText, ShoppingBag, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -50,15 +51,15 @@ export default function Returns() {
       const searchVal = invoiceSearch.trim();
       const isNumeric = /^\d+$/.test(searchVal);
       if (isNumeric) {
-        const res = await fetch(`/api/sales/${searchVal}`, { credentials: "include" });
+        const res = await fetch(`/api/sales/${searchVal}`, { headers: getAuthHeaders() });
         if (res.ok) return res.json();
       }
-      const listRes = await fetch(`/api/sales?invoiceNumber=${encodeURIComponent(searchVal)}`, { credentials: "include" });
+      const listRes = await fetch(`/api/sales?invoiceNumber=${encodeURIComponent(searchVal)}`, { headers: getAuthHeaders() });
       if (!listRes.ok) throw new Error(t("returns.error_invoice_not_found"));
       const list = await listRes.json();
       if (Array.isArray(list) && list.length > 0) {
         const match = list.find((s: any) => (s.invoiceNumber || s.invoice_number) === searchVal) || list[0];
-        const detailRes = await fetch(`/api/sales/${match.id}`, { credentials: "include" });
+        const detailRes = await fetch(`/api/sales/${match.id}`, { headers: getAuthHeaders() });
         if (detailRes.ok) return detailRes.json();
       }
       throw new Error(t("returns.error_invoice_not_found"));

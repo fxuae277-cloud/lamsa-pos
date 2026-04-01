@@ -1,3 +1,4 @@
+import { getAuthHeaders } from "@/lib/queryClient";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -130,7 +131,7 @@ export default function Executive() {
   const { data, isLoading, dataUpdatedAt } = useQuery<any>({
     queryKey: ["/api/dashboard/executive", fromDate, toDate, branchId],
     queryFn: async () => {
-      const res = await fetch(`/api/dashboard/executive?${qs}`, { credentials: "include" });
+      const res = await fetch(`/api/dashboard/executive?${qs}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(`${res.status}`);
       return res.json();
     },

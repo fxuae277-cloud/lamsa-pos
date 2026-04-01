@@ -1,3 +1,4 @@
+import { getAuthHeaders } from "@/lib/queryClient";
 import { useState } from "react";
 import { Plus, Search, Package, Edit2, Trash2, Eye, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -57,7 +58,7 @@ export default function Products() {
       if (search.trim()) p.set("q", search.trim());
       if (filterCat !== "all") p.set("categoryId", filterCat);
       if (filterType !== "all") p.set("productType", filterType);
-      const res = await fetch(`/api/products${p.toString() ? "?" + p.toString() : ""}`, { credentials: "include" });
+      const res = await fetch(`/api/products${p.toString() ? "?" + p.toString() : ""}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },

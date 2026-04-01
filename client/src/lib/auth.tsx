@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "./queryClient";
+import { apiRequest, queryClient, getAuthHeaders } from "./queryClient";
 import { useI18n } from "./i18n";
 import type { User } from "@shared/schema";
 
@@ -21,7 +21,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { data, isLoading } = useQuery<{ user: SafeUser } | null>({
     queryKey: ["/api/auth/me"],
     queryFn: async () => {
-      const res = await fetch("/api/auth/me", { credentials: "include" });
+      const token = localStorage.getItem("token");
+      if (!token) return null;
+      const res = await fetch("/api/auth/me", { headers: getAuthHeaders() });
       if (res.status === 401) return null;
       if (!res.ok) return null;
       return res.json();
@@ -39,10 +41,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginMutation = useMutation({
     mutationFn: async ({ username, password }: { username: string; password: string }) => {
       const res = await apiRequest("POST", "/api/auth/login", { username, password });
-      return res.json();
+      return res.json() as Promise<{ token: string; user: SafeUser }>;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    onSuccess: (data) => {
+      localStorage.setItem("token", data.token);
+      queryClient.setQueryData(["/api/auth/me"], { user: data.user });
     },
   });
 
@@ -51,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await apiRequest("POST", "/api/auth/logout");
     },
     onSuccess: () => {
+      localStorage.removeItem("token");
       queryClient.setQueryData(["/api/auth/me"], null);
       queryClient.clear();
     },

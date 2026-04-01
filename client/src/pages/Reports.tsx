@@ -1,3 +1,4 @@
+import { getAuthHeaders } from "@/lib/queryClient";
 import { useState } from "react";
 import { Calendar, Download, Banknote, CreditCard, Building2, TrendingUp, TrendingDown, DollarSign, BarChart3, Package, ShoppingBag, Eye, Layers, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -96,7 +97,7 @@ function OverviewTab({ from, to, branchId }: { from: string; to: string; branchI
   const { data: report, isLoading } = useQuery<any>({
     queryKey: ["/api/reports/overview", from, to, branchId],
     queryFn: async () => {
-      const res = await fetch(`/api/reports/overview?${params}`, { credentials: "include" });
+      const res = await fetch(`/api/reports/overview?${params}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(`${res.status}`);
       return res.json();
     },
@@ -214,7 +215,7 @@ function SalesTab({ from, to, branchId }: { from: string; to: string; branchId?:
   const { data, isLoading } = useQuery<any>({
     queryKey: ["/api/reports/sales-list", from, to, branchId, pmFilter],
     queryFn: async () => {
-      const res = await fetch(`/api/reports/sales-list?${params}`, { credentials: "include" });
+      const res = await fetch(`/api/reports/sales-list?${params}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(`${res.status}`);
       return res.json();
     },
@@ -312,7 +313,7 @@ function PaymentsTab({ from, to, branchId }: { from: string; to: string; branchI
   const { data, isLoading } = useQuery<any>({
     queryKey: ["/api/reports/payments-report", from, to, branchId],
     queryFn: async () => {
-      const res = await fetch(`/api/reports/payments-report?${params}`, { credentials: "include" });
+      const res = await fetch(`/api/reports/payments-report?${params}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(`${res.status}`);
       return res.json();
     },
@@ -434,7 +435,7 @@ function ShiftsTab({ from, to, branchId }: { from: string; to: string; branchId?
   const { data: shiftsData = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/reports/shifts-report", from, to, branchId],
     queryFn: async () => {
-      const res = await fetch(`/api/reports/shifts-report?${params}`, { credentials: "include" });
+      const res = await fetch(`/api/reports/shifts-report?${params}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(`${res.status}`);
       return res.json();
     },
@@ -443,7 +444,7 @@ function ShiftsTab({ from, to, branchId }: { from: string; to: string; branchId?
   const { data: shiftDetails } = useQuery<any>({
     queryKey: ["/api/reports/shift-details", detailShiftId],
     queryFn: async () => {
-      const res = await fetch(`/api/reports/shift-details/${detailShiftId}`, { credentials: "include" });
+      const res = await fetch(`/api/reports/shift-details/${detailShiftId}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(`${res.status}`);
       return res.json();
     },
@@ -666,7 +667,7 @@ function ProductsTab({ from, to, branchId }: { from: string; to: string; branchI
   const { data = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/reports/products-report", from, to, branchId],
     queryFn: async () => {
-      const res = await fetch(`/api/reports/products-report?${params}`, { credentials: "include" });
+      const res = await fetch(`/api/reports/products-report?${params}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(`${res.status}`);
       return res.json();
     },
@@ -741,7 +742,7 @@ function CategoriesTab({ from, to, branchId }: { from: string; to: string; branc
   const { data = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/reports/categories-report", from, to, branchId],
     queryFn: async () => {
-      const res = await fetch(`/api/reports/categories-report?${params}`, { credentials: "include" });
+      const res = await fetch(`/api/reports/categories-report?${params}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(`${res.status}`);
       return res.json();
     },
@@ -816,7 +817,7 @@ function BranchesTab({ from, to }: { from: string; to: string }) {
   const { data, isLoading } = useQuery<any>({
     queryKey: ["/api/reports/branch-comparison-range", from, to],
     queryFn: async () => {
-      const res = await fetch(`/api/reports/branch-comparison-range?${params}`, { credentials: "include" });
+      const res = await fetch(`/api/reports/branch-comparison-range?${params}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(`${res.status}`);
       return res.json();
     },

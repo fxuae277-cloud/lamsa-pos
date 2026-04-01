@@ -1,6 +1,4 @@
 import express, { type Request, Response, NextFunction } from "express";
-import session from "express-session";
-import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -14,19 +12,9 @@ import { logger } from "./logger";
 const app = express();
 const httpServer = createServer(app);
 
-app.set("trust proxy", 1);
-
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
-  }
-}
-
-declare module "express-session" {
-  interface SessionData {
-    userId: number;
-    user?: { id: number; name: string; role: string; branchId?: number | null; [key: string]: any };
-    userName?: string;
   }
 }
 
@@ -41,25 +29,6 @@ app.use(
 app.use(express.urlencoded({ extended: false }));
 app.use(apiLimiter);
 
-const PgStore = connectPgSimple(session);
-app.use(
-  session({
-    store: new PgStore({
-      conString: process.env.DATABASE_URL,
-      createTableIfMissing: false,
-    }),
-    secret: process.env.SESSION_SECRET || "lamsat-onothah-secret-2024",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      secure: false,
-      maxAge: 24 * 60 * 60 * 1000,
-      sameSite: "lax",
-    },
-  })
-);
-
 app.use((req, res, next) => {
   const start = Date.now();
   const reqPath = req.path;
@@ -72,7 +41,7 @@ app.use((req, res, next) => {
       path: reqPath,
       status: res.statusCode,
       duration,
-      userId: req.session?.userId ?? null,
+      userId: req.jwtUser?.userId ?? null,
       ip: req.ip,
     };
     if (duration > 500) {

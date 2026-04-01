@@ -5,6 +5,7 @@ import path from "path";
 import fs from "fs";
 import archiver from "archiver";
 import AdmZip from "adm-zip";
+import { requireOwnerOrAdmin } from "./middleware/auth";
 
 const BACKUP_DIR = path.join(process.cwd(), "backups");
 
@@ -220,20 +221,6 @@ export function initBackupScheduler() {
   }, 60 * 60 * 1000); // Every hour
 }
 
-function requireOwnerOrAdmin(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.userId) {
-    return res.status(401).json({ message: "غير مصرح" });
-  }
-  pool.query("SELECT role FROM users WHERE id = $1", [req.session.userId])
-    .then((result: any) => {
-      const user = result.rows[0];
-      if (!user || (user.role !== "owner" && user.role !== "admin")) {
-        return res.status(403).json({ message: "غير مصرح - صلاحيات غير كافية" });
-      }
-      next();
-    })
-    .catch(() => res.status(500).json({ message: "خطأ في التحقق" }));
-}
 
 function sanitizeFilename(name: string): string | null {
   const clean = path.basename(name);

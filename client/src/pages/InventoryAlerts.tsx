@@ -1,3 +1,4 @@
+import { getAuthHeaders } from "@/lib/queryClient";
 import { AlertTriangle, Package } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -10,7 +11,7 @@ export default function InventoryAlerts() {
   const { data: dashboard } = useQuery<any>({
     queryKey: ["/api/dashboard"],
     queryFn: async () => {
-      const res = await fetch("/api/dashboard", { credentials: "include" });
+      const res = await fetch("/api/dashboard", { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },

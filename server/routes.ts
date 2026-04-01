@@ -34,7 +34,7 @@ import { registerBackupRoutes } from "./backup";
 import { registerMobileRoutes } from "./mobile-routes";
 import { saveUploadedFile, parseInvoiceFile } from "./ocr";
 import { authLimiter, passwordLimiter, uploadLimiter } from "./middleware/rateLimiter";
-import { requireAuth, requireOwnerOrAdmin, requireRole, requireManager, enforceBranchScope } from "./middleware/auth";
+import { requireAuth, requireOwnerOrAdmin, requireRole, requireManager, enforceBranchScope, signToken } from "./middleware/auth";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -73,21 +73,9 @@ export async function registerRoutes(
       return res.status(401).json({ message: "اسم المستخدم أو كلمة المرور غير صحيحة" });
     }
 
-    // Detect hash algorithm from stored prefix ($2b$ = bcrypt, $2a$ = old bcrypt)
-    const hashAlgo = user.password.startsWith("$2")
-      ? `bcrypt (prefix=${user.password.slice(0, 7)})`
-      : "unknown";
-    logger.info("login_hash_check", {
-      username,
-      userId: user.id,
-      hashAlgo,
-      isActive: user.isActive,
-      role: user.role,
-    });
-
-    const validPassword = true; // temp: bypass for debugging
+    const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
-      logger.warn("failed_login", { username, reason: "wrong_password", userId: user.id, hashAlgo, ip: req.ip });
+      logger.warn("failed_login", { username, reason: "wrong_password", userId: user.id, ip: req.ip });
       return res.status(401).json({ message: "اسم المستخدم أو كلمة المرور غير صحيحة" });
     }
 
@@ -97,25 +85,18 @@ export async function registerRoutes(
     }
 
     logger.info("login_success", { username, userId: user.id, role: user.role, ip: req.ip });
-    req.session.userId = user.id;
+    const token = signToken({ userId: user.id, role: user.role, branchId: user.branchId, userName: user.name });
     const { password: _, ...safeUser } = user;
-    res.json({ user: safeUser });
+    res.json({ token, user: safeUser });
   });
 
-  app.post("/api/auth/logout", (req, res) => {
-    req.session.destroy(() => {
-      res.clearCookie("connect.sid");
-      res.json({ message: "تم تسجيل الخروج" });
-    });
+  app.post("/api/auth/logout", (_req, res) => {
+    res.json({ message: "تم تسجيل الخروج" });
   });
 
-  app.get("/api/auth/me", async (req, res) => {
-    if (!req.session.userId) {
-      return res.status(401).json({ message: "غير مصرح" });
-    }
-    const user = await storage.getUser(req.session.userId);
+  app.get("/api/auth/me", requireAuth, async (req, res) => {
+    const user = await storage.getUser(req.jwtUser!.userId);
     if (!user || !user.isActive) {
-      req.session.destroy(() => {});
       return res.status(401).json({ message: "غير مصرح" });
     }
     const { password: _, ...safeUser } = user;
@@ -124,7 +105,7 @@ export async function registerRoutes(
 
   app.patch("/api/me/settings", requireAuth, async (req, res) => {
     try {
-      const userId = req.session.userId!;
+      const userId = req.jwtUser!.userId;
       const { uiLanguage } = req.body;
       if (uiLanguage && (uiLanguage === "ar" || uiLanguage === "en")) {
         await pool.query("UPDATE users SET ui_language = $1 WHERE id = $2", [uiLanguage, userId]);
@@ -158,7 +139,7 @@ export async function registerRoutes(
           [key, String(value)]
         );
       }
-      const userId = req.session.userId!;
+      const userId = req.jwtUser!.userId;
       const user = await storage.getUser(userId);
       await pool.query(
         `INSERT INTO audit_log (action, entity_type, entity_id, user_id, user_name, details, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
@@ -176,7 +157,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/branches", requireAuth, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
+    const user = await storage.getUser(req.jwtUser!.userId);
     if (!user) return res.status(401).json({ message: "المستخدم غير موجود" });
     if (user.role === "owner" || user.role === "admin") {
       res.json(await storage.getBranches());
@@ -217,7 +198,7 @@ export async function registerRoutes(
     if (newPassword.length < 6) {
       return res.status(400).json({ message: "كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل" });
     }
-    const user = await storage.getUser(req.session.userId!);
+    const user = await storage.getUser(req.jwtUser!.userId);
     if (!user) return res.status(404).json({ message: "المستخدم غير موجود" });
     const valid = await bcrypt.compare(oldPassword, user.password);
     if (!valid) return res.status(401).json({ message: "كلمة المرور القديمة غير صحيحة" });
@@ -305,15 +286,15 @@ export async function registerRoutes(
     if (!targetUser) return res.status(404).json({ message: "المستخدم غير موجود" });
     const hashed = await bcrypt.hash(newPassword, 10);
     await storage.updateUser(id, { password: hashed });
-    const actor = req.session?.user;
+    const actor = req.jwtUser;
     await storage.addAuditLog({
       action: "password_reset",
       entityType: "user",
       entityId: id,
       branchId: targetUser.branchId,
-      userId: actor?.id ?? null,
-      userName: actor?.name ?? null,
-      details: `إعادة تعيين كلمة مرور الموظف "${targetUser.name}" بواسطة ${actor?.name || "غير معروف"}`,
+      userId: actor?.userId ?? null,
+      userName: actor?.userName ?? null,
+      details: `إعادة تعيين كلمة مرور الموظف "${targetUser.name}" بواسطة ${actor?.userName || "غير معروف"}`,
       oldValue: null,
       newValue: null,
     });
@@ -872,7 +853,7 @@ export async function registerRoutes(
         entityType: "product",
         entityId: productId,
         branchId: null,
-        userId: req.session.userId ?? null,
+        userId: req.jwtUser?.userId ?? null,
         userName: null,
         details: `تغيير سعر المنتج "${row.name}"`,
         oldValue: JSON.stringify({ price: oldProduct.price }),
@@ -1105,7 +1086,7 @@ export async function registerRoutes(
         toLocationId: req.body.toLocationId,
         status: "draft",
         notes: req.body.notes || null,
-        createdBy: req.session.userId!,
+        createdBy: req.jwtUser!.userId,
       });
       res.status(201).json(transfer);
     } catch (err: any) {
@@ -1174,7 +1155,7 @@ export async function registerRoutes(
         toLocationId,
         status: "draft",
         notes: req.body.notes || null,
-        createdBy: req.session.userId!,
+        createdBy: req.jwtUser!.userId,
       });
 
       for (const line of filteredLines) {
@@ -1185,7 +1166,7 @@ export async function registerRoutes(
         });
       }
 
-      const result = await storage.approveStockTransfer(transfer.id, req.session.userId!);
+      const result = await storage.approveStockTransfer(transfer.id, req.jwtUser!.userId);
       if (!result) {
         return res.status(400).json({ message: "فشل اعتماد التحويل" });
       }
@@ -1212,7 +1193,7 @@ export async function registerRoutes(
 
   app.post("/api/stock-transfers/:id/approve", requireAuth, requireManager, async (req, res) => {
     try {
-      const result = await storage.approveStockTransfer(Number(req.params.id), req.session.userId!);
+      const result = await storage.approveStockTransfer(Number(req.params.id), req.jwtUser!.userId);
       if (!result) return res.status(400).json({ message: "لا يمكن اعتماد التحويل" });
       res.json(result);
     } catch (err: any) {
@@ -1239,7 +1220,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/inventory", requireAuth, requireManager, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
+    const user = await storage.getUser(req.jwtUser!.userId);
     if (!user) return res.status(401).json({ message: "غير مصرح" });
     const branchId = req.query.branchId
       ? Number(req.query.branchId)
@@ -1250,7 +1231,7 @@ export async function registerRoutes(
     res.json(await storage.getLowStockAlerts());
   });
   app.get("/api/inventory/transactions", requireAuth, requireManager, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
+    const user = await storage.getUser(req.jwtUser!.userId);
     if (!user) return res.status(401).json({ message: "غير مصرح" });
     const branchId = req.query.branchId
       ? Number(req.query.branchId)
@@ -1282,7 +1263,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/locations", requireAuth, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
+    const user = await storage.getUser(req.jwtUser!.userId);
     if (!user) return res.status(401).json({ message: "غير مصرح" });
     const branchId = req.query.branchId
       ? Number(req.query.branchId)
@@ -1291,7 +1272,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/branch-inventory", requireAuth, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
+    const user = await storage.getUser(req.jwtUser!.userId);
     if (!user) return res.status(401).json({ message: "غير مصرح" });
     const branchId = req.query.branchId
       ? Number(req.query.branchId)
@@ -1300,7 +1281,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/location-inventory", requireAuth, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
+    const user = await storage.getUser(req.jwtUser!.userId);
     if (!user) return res.status(401).json({ message: "غير مصرح" });
     const branchId = req.query.branchId
       ? Number(req.query.branchId)
@@ -1310,7 +1291,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/location-inventory/transactions", requireAuth, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
+    const user = await storage.getUser(req.jwtUser!.userId);
     if (!user) return res.status(401).json({ message: "غير مصرح" });
     const branchId = req.query.branchId
       ? Number(req.query.branchId)
@@ -1320,7 +1301,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/location-inventory/low-stock", requireAuth, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
+    const user = await storage.getUser(req.jwtUser!.userId);
     if (!user) return res.status(401).json({ message: "غير مصرح" });
     const branchId = req.query.branchId
       ? Number(req.query.branchId)
@@ -1335,7 +1316,7 @@ export async function registerRoutes(
       if (!fromLocationId || !toLocationId || !productId || !quantity || quantity <= 0) {
         return res.status(400).json({ message: "البيانات ناقصة أو غير صحيحة" });
       }
-      await storage.transferStock(fromLocationId, toLocationId, productId, quantity, note, req.session.userId);
+      await storage.transferStock(fromLocationId, toLocationId, productId, quantity, note, req.jwtUser!.userId);
       res.json({ message: "تم النقل بنجاح" });
     } catch (e: any) {
       res.status(400).json({ message: e.message || "فشل النقل" });
@@ -1348,7 +1329,7 @@ export async function registerRoutes(
       if (!branchId || !items || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ message: "البيانات ناقصة أو غير صحيحة" });
       }
-      const result = await storage.createLocationTransfer(branchId, items, req.session.userId!);
+      const result = await storage.createLocationTransfer(branchId, items, req.jwtUser!.userId);
       res.json(result);
     } catch (e: any) {
       res.status(400).json({ message: e.message || "فشل التحويل" });
@@ -1367,7 +1348,7 @@ export async function registerRoutes(
         }
       }
       const mapped = items.map((it: any) => ({ productId: Number(it.product_id), qty: Number(it.qty) }));
-      const result = await storage.createLocationTransfer(Number(branch_id), mapped, req.session.userId!);
+      const result = await storage.createLocationTransfer(Number(branch_id), mapped, req.jwtUser!.userId);
       res.json({ success: true, transfer_id: result.transferId, item_count: result.itemCount });
     } catch (e: any) {
       res.status(400).json({ message: e.message || "فشل التحويل" });
@@ -1379,7 +1360,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/inventory-transfers", requireAuth, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
+    const user = await storage.getUser(req.jwtUser!.userId);
     if (!user) return res.status(401).json({ message: "غير مصرح" });
     const branchId = req.query.branchId
       ? Number(req.query.branchId)
@@ -1393,7 +1374,7 @@ export async function registerRoutes(
       if (!branchId || !productId || !quantity || quantity <= 0) {
         return res.status(400).json({ message: "البيانات ناقصة أو غير صحيحة" });
       }
-      await storage.addStock(branchId, productId, quantity, "manual_receipt", undefined, undefined, note || "استلام يدوي", req.session.userId);
+      await storage.addStock(branchId, productId, quantity, "manual_receipt", undefined, undefined, note || "استلام يدوي", req.jwtUser!.userId);
       res.json({ message: "تم إضافة البضاعة" });
     } catch (e: any) {
       res.status(400).json({ message: e.message || "فشل الإضافة" });
@@ -1499,7 +1480,7 @@ export async function registerRoutes(
     try {
       const supplierId = Number(req.params.id);
       const { amount, method, note, branchId } = req.body;
-      const createdBy = req.session.userId!;
+      const createdBy = req.jwtUser!.userId;
 
       if (!amount || amount <= 0) {
         return res.status(400).json({ message: "المبلغ يجب أن يكون أكبر من صفر" });
@@ -1560,7 +1541,7 @@ export async function registerRoutes(
   app.get("/api/sales/:id", requireAuth, enforceBranchScope, async (req, res) => {
     const detail = await storage.getSaleWithDetails(Number(req.params.id));
     if (!detail) return res.status(404).json({ message: "الفاتورة غير موجودة" });
-    const user = await storage.getUser(req.session.userId!);
+    const user = await storage.getUser(req.jwtUser!.userId);
     const isBranchOnly = user?.role === "cashier" || user?.role === "employee" || user?.role === "manager";
     if (isBranchOnly && detail.branchId !== user!.branchId) {
       return res.status(403).json({ message: "غير مصرح" });
@@ -1569,7 +1550,7 @@ export async function registerRoutes(
   });
   app.post("/api/sales", requireAuth, async (req, res) => {
     const { items, branchId: _b, cashierId: _c, employeeId: _e, terminalName: _t, shiftId: _s, ...saleData } = req.body;
-    const user = await storage.getUser(req.session.userId!);
+    const user = await storage.getUser(req.jwtUser!.userId);
     if (!user) return res.status(401).json({ message: "المستخدم غير موجود" });
     let shiftId: number | null = null;
     if (user.branchId && user.terminalName) {
@@ -1618,7 +1599,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/orders", requireAuth, enforceBranchScope, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
+    const user = await storage.getUser(req.jwtUser!.userId);
     if (!user) return res.status(401).json({ message: "غير مصرح" });
     const isManager = ["owner", "admin", "manager"].includes(user.role);
     const branchFilter = req.query.branchId ? parseInt(req.query.branchId as string) : undefined;
@@ -1662,7 +1643,7 @@ export async function registerRoutes(
           .limit(1);
         if (openShift) shiftId = openShift.id;
       }
-      const order = await storage.createOrder({ ...parsed.data, shiftId, employeeId: req.session.userId }, items);
+      const order = await storage.createOrder({ ...parsed.data, shiftId, employeeId: req.jwtUser!.userId }, items);
       if ((parsed.data as any).customerPhone) {
         storage.findOrCreateCustomerByPhone((parsed.data as any).customerPhone, (parsed.data as any).customerName || undefined).catch(() => {});
       }
@@ -1685,12 +1666,12 @@ export async function registerRoutes(
 
       // Deduct inventory when order is completed for the first time
       if (status === "completed" && oldStatus !== "completed") {
-        await storage.deductOrderInventory(row.id, req.session.userId ?? null);
+        await storage.deductOrderInventory(row.id, req.jwtUser?.userId ?? null);
       }
 
       // Restore inventory if a completed order is cancelled via status change
       if (status === "cancelled" && oldStatus === "completed") {
-        await storage.restoreOrderInventory(row.id, req.session.userId ?? null);
+        await storage.restoreOrderInventory(row.id, req.jwtUser?.userId ?? null);
       }
 
       if (status === "cancelled" || oldStatus !== status) {
@@ -1699,7 +1680,7 @@ export async function registerRoutes(
           entityType: "order",
           entityId: row.id,
           branchId: row.branchId ?? null,
-          userId: req.session.userId ?? null,
+          userId: req.jwtUser?.userId ?? null,
           userName: null,
           details: `تغيير حالة الطلب ${row.orderNumber} من ${oldStatus} إلى ${status}`,
           oldValue: JSON.stringify({ status: oldStatus }),
@@ -1726,12 +1707,8 @@ export async function registerRoutes(
       const orderId = Number(req.params.id);
       const { reason } = req.body;
       if (!reason) return res.status(400).json({ message: "سبب الإلغاء مطلوب" });
-      const user = req.session?.user;
-      if (!user) return res.status(401).json({ message: "غير مسجل دخول" });
-      if (!["owner", "admin", "manager"].includes(user.role)) {
-        return res.status(403).json({ message: "ليس لديك صلاحية إلغاء الطلبات" });
-      }
-      const result = await storage.cancelOrderFull(orderId, user.id, user.name, reason);
+      const jwtU = req.jwtUser!;
+      const result = await storage.cancelOrderFull(orderId, jwtU.userId, jwtU.userName, reason);
       if (!result) return res.status(404).json({ message: "الطلب غير موجود" });
       res.json(result);
     } catch (err: any) {
@@ -1742,11 +1719,7 @@ export async function registerRoutes(
   app.post("/api/sales/:id/return", requireAuth, requireManager, enforceBranchScope, async (req, res) => {
     try {
       const saleId = Number(req.params.id);
-      const user = req.session?.user;
-      if (!user) return res.status(401).json({ message: "غير مسجل دخول" });
-      if (!["owner", "admin", "manager"].includes(user.role)) {
-        return res.status(403).json({ message: "ليس لديك صلاحية إنشاء مرتجعات" });
-      }
+      const jwtU = req.jwtUser!;
 
       const { items, reason, refundMethod, shiftId } = req.body;
       if (!items || !Array.isArray(items) || items.length === 0) {
@@ -1784,7 +1757,7 @@ export async function registerRoutes(
         refundMethod: refundMethod || sale.paymentMethod || "cash",
         cogsReturned: "0",
         reason: reason || null,
-        createdBy: user.id,
+        createdBy: jwtU.userId,
       }, returnItems);
 
       journalForSaleReturn({
@@ -1794,7 +1767,7 @@ export async function registerRoutes(
         refundMethod: refundMethod || sale.paymentMethod || "cash",
         cogsReturned: result.cogsReturned || "0",
         branchId: sale.branchId,
-        createdBy: user.id,
+        createdBy: jwtU.userId,
         saleInvoiceNumber: sale.invoiceNumber || "",
         createdAt: result.createdAt ?? undefined,
       }).catch(err => console.error("[AutoJournal] Return error:", err.message));
@@ -1874,7 +1847,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "مصدر غير صالح. الخيارات: cash, card, bank_transfer" });
       }
 
-      const user = await storage.getUser(req.session.userId!);
+      const user = await storage.getUser(req.jwtUser!.userId);
       if (!user || !user.branchId) {
         return res.status(400).json({ message: "بيانات المستخدم ناقصة (الفرع)" });
       }
@@ -1964,7 +1937,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/shifts/current", requireAuth, enforceBranchScope, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
+    const user = await storage.getUser(req.jwtUser!.userId);
     if (!user || !user.branchId || !user.terminalName) {
       return res.status(400).json({ message: "بيانات المستخدم ناقصة (الفرع أو الجهاز)" });
     }
@@ -1977,7 +1950,7 @@ export async function registerRoutes(
     res.json(await storage.getShifts());
   });
   app.post("/api/shifts", requireAuth, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
+    const user = await storage.getUser(req.jwtUser!.userId);
     if (!user || !user.branchId || !user.terminalName) {
       return res.status(400).json({ message: "بيانات المستخدم ناقصة (الفرع أو الجهاز)" });
     }
@@ -2210,7 +2183,7 @@ export async function registerRoutes(
         otherCost: String(otherCost || 0),
         status: "pending" as const,
         notes: notes || null,
-        createdBy: req.session.userId!,
+        createdBy: req.jwtUser!.userId,
       };
       const parsed = insertPurchaseInvoiceSchema.safeParse(data);
       if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
@@ -2461,7 +2434,7 @@ export async function registerRoutes(
     try {
       const { amount, note } = req.body;
       if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ message: "المبلغ مطلوب ويجب أن يكون أكبر من صفر" });
-      const user = await storage.getUser(req.session.userId!);
+      const user = await storage.getUser(req.jwtUser!.userId);
       if (!user || !user.branchId) return res.status(400).json({ message: "بيانات المستخدم ناقصة" });
       let shiftId: number | null = null;
       if (user.terminalName) {
@@ -2489,7 +2462,7 @@ export async function registerRoutes(
     try {
       const { amount, note } = req.body;
       if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ message: "المبلغ مطلوب ويجب أن يكون أكبر من صفر" });
-      const user = await storage.getUser(req.session.userId!);
+      const user = await storage.getUser(req.jwtUser!.userId);
       if (!user || !user.branchId) return res.status(400).json({ message: "بيانات المستخدم ناقصة" });
       let shiftId: number | null = null;
       if (user.terminalName) {
@@ -2721,7 +2694,7 @@ export async function registerRoutes(
         locationId: Number(locationId),
         status: "draft",
         note: note || null,
-        createdBy: req.session.userId!,
+        createdBy: req.jwtUser!.userId,
       });
       res.status(201).json(st);
     } catch (err: any) {
@@ -2752,7 +2725,7 @@ export async function registerRoutes(
 
   app.post("/api/stocktakes/:id/approve", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
-      const updated = await storage.approveStocktake(Number(req.params.id), req.session.userId!);
+      const updated = await storage.approveStocktake(Number(req.params.id), req.jwtUser!.userId);
       if (!updated) return res.status(400).json({ message: "لا يمكن اعتماد هذا الجرد" });
       res.json(updated);
     } catch (err: any) {
@@ -2801,14 +2774,14 @@ export async function registerRoutes(
         qtyChange: Number(qtyChange),
         qtyAfter,
         reason,
-        createdBy: req.session.userId!,
+        createdBy: req.jwtUser!.userId,
       });
 
       const todayStr = new Date().toISOString().slice(0, 10);
       await pool.query(
         `INSERT INTO inventory_transactions (date, branch_id, ${Number(qtyChange) > 0 ? 'to_location_id' : 'from_location_id'}, product_id, type, qty, note, created_by)
          VALUES ($1, $2, $3, $4, 'manual_adjustment', $5, $6, $7)`,
-        [todayStr, branchId, locationId, productId, Math.abs(Number(qtyChange)), reason, req.session.userId]
+        [todayStr, branchId, locationId, productId, Math.abs(Number(qtyChange)), reason, req.jwtUser!.userId]
       );
 
       storage.addAuditLog({
@@ -2816,7 +2789,7 @@ export async function registerRoutes(
         entityType: "inventory",
         entityId: adj.id,
         branchId: Number(branchId),
-        userId: req.session.userId ?? null,
+        userId: req.jwtUser?.userId ?? null,
         userName: null,
         details: `تعديل مخزون المنتج ${productId}: ${qtyBefore} → ${qtyAfter} (${reason})`,
         oldValue: JSON.stringify({ qty: qtyBefore }),
@@ -2862,7 +2835,7 @@ export async function registerRoutes(
         type: type || "sales",
         note: note || null,
         status: "pending",
-        createdBy: req.session.userId!
+        createdBy: req.jwtUser!.userId
       });
       res.status(201).json(commission);
     } catch (err: any) {
@@ -2895,7 +2868,7 @@ export async function registerRoutes(
         type: type || "other",
         note: note || null,
         status: "pending",
-        createdBy: req.session.userId!
+        createdBy: req.jwtUser!.userId
       });
       res.status(201).json(entitlement);
     } catch (err: any) {
@@ -2934,13 +2907,13 @@ export async function registerRoutes(
         periodStart: periodStart || null,
         periodEnd: periodEnd || null,
         note: note || null,
-        createdBy: req.session.userId!,
+        createdBy: req.jwtUser!.userId,
       });
       await storage.generatePayrollRun(run.id, String(month), Number(year));
 
       await storage.addAuditLog({
         action: "payroll_generate", entityType: "payroll_run", entityId: run.id,
-        userId: req.session.userId!, userName: req.session.userName || "",
+        userId: req.jwtUser!.userId, userName: req.jwtUser?.userName || "",
         details: `توليد كشف راتب ${month}/${year}`,
       });
 
@@ -2966,11 +2939,11 @@ export async function registerRoutes(
 
   app.post("/api/payroll-runs/:id/approve", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
-      const updated = await storage.approvePayrollRun(Number(req.params.id), req.session.userId!);
+      const updated = await storage.approvePayrollRun(Number(req.params.id), req.jwtUser!.userId);
       if (!updated) return res.status(400).json({ message: "لا يمكن اعتماد هذا الكشف" });
       await storage.addAuditLog({
         action: "payroll_approve", entityType: "payroll_run", entityId: updated.id,
-        userId: req.session.userId!, userName: req.session.userName || "",
+        userId: req.jwtUser!.userId, userName: req.jwtUser?.userName || "",
         details: `اعتماد كشف راتب ${updated.month}/${updated.year}`,
       });
       res.json(updated);
@@ -2981,11 +2954,11 @@ export async function registerRoutes(
 
   app.post("/api/payroll-runs/:id/review", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
-      const updated = await storage.reviewPayrollRun(Number(req.params.id), req.session.userId!);
+      const updated = await storage.reviewPayrollRun(Number(req.params.id), req.jwtUser!.userId);
       if (!updated) return res.status(400).json({ message: "لا يمكن مراجعة هذا الكشف" });
       await storage.addAuditLog({
         action: "payroll_review", entityType: "payroll_run", entityId: updated.id,
-        userId: req.session.userId!, userName: req.session.userName || "",
+        userId: req.jwtUser!.userId, userName: req.jwtUser?.userName || "",
         details: `مراجعة كشف راتب ${updated.month}/${updated.year}`,
       });
       res.json(updated);
@@ -2996,13 +2969,13 @@ export async function registerRoutes(
 
   app.post("/api/payroll-runs/:id/reopen", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
-      const user = await storage.getUser(req.session.userId!);
+      const user = await storage.getUser(req.jwtUser!.userId);
       if (!user || user.role !== "owner") return res.status(403).json({ message: "فقط المالك يمكنه إعادة فتح الكشف" });
-      const updated = await storage.reopenPayrollRun(Number(req.params.id), req.session.userId!);
+      const updated = await storage.reopenPayrollRun(Number(req.params.id), req.jwtUser!.userId);
       if (!updated) return res.status(400).json({ message: "لا يمكن إعادة فتح هذا الكشف" });
       await storage.addAuditLog({
         action: "payroll_reopen", entityType: "payroll_run", entityId: updated.id,
-        userId: req.session.userId!, userName: req.session.userName || "",
+        userId: req.jwtUser!.userId, userName: req.jwtUser?.userName || "",
         details: `إعادة فتح كشف راتب ${updated.month}/${updated.year}`,
       });
       res.json(updated);
@@ -3013,13 +2986,13 @@ export async function registerRoutes(
 
   app.post("/api/payroll-runs/:id/cancel", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
-      const user = await storage.getUser(req.session.userId!);
+      const user = await storage.getUser(req.jwtUser!.userId);
       if (!user || user.role !== "owner") return res.status(403).json({ message: "فقط المالك يمكنه إلغاء الكشف" });
-      const updated = await storage.cancelPayrollRun(Number(req.params.id), req.session.userId!);
+      const updated = await storage.cancelPayrollRun(Number(req.params.id), req.jwtUser!.userId);
       if (!updated) return res.status(400).json({ message: "لا يمكن إلغاء هذا الكشف" });
       await storage.addAuditLog({
         action: "payroll_cancel", entityType: "payroll_run", entityId: updated.id,
-        userId: req.session.userId!, userName: req.session.userName || "",
+        userId: req.jwtUser!.userId, userName: req.jwtUser?.userName || "",
         details: `إلغاء كشف راتب ${updated.month}/${updated.year}`,
       });
       res.json(updated);
@@ -3058,25 +3031,25 @@ export async function registerRoutes(
         note: note || null,
         deductionMode: deductionMode || "full_next_payroll",
         installmentAmount: installmentAmount ? String(installmentAmount) : null,
-        createdBy: req.session.userId!,
+        createdBy: req.jwtUser!.userId,
       });
 
       await storage.createEmployeeLedgerEntry({
         employeeId: Number(employeeId), movementType: "advance_given",
         referenceType: "employee_advance", referenceId: advance.id,
         amount: String(amount), date,
-        note: note || "سلفة جديدة", createdBy: req.session.userId!,
+        note: note || "سلفة جديدة", createdBy: req.jwtUser!.userId,
       });
 
       await storage.addAuditLog({
         action: "advance_create", entityType: "employee_advance", entityId: advance.id,
-        userId: req.session.userId!, userName: req.session.userName || "",
+        userId: req.jwtUser!.userId, userName: req.jwtUser?.userName || "",
         details: `إنشاء سلفة بمبلغ ${amount}`, newValue: JSON.stringify({ amount, deductionMode: deductionMode || "full_next_payroll" }),
       });
 
       try {
         const { journalForEmployeeAdvance } = await import("./autoJournal");
-        await journalForEmployeeAdvance(advance, req.session.userId!);
+        await journalForEmployeeAdvance(advance, req.jwtUser!.userId);
       } catch (jErr) {}
 
       const emp = await storage.getUser(Number(employeeId));
@@ -3089,7 +3062,7 @@ export async function registerRoutes(
         refId: `ADV-${advance.id}`,
         category: "employee_advance",
         note: `سلفة موظف: ${emp?.name || employeeId}`,
-        createdBy: req.session.userId!,
+        createdBy: req.jwtUser!.userId,
       });
 
       res.status(201).json(advance);
@@ -3130,12 +3103,12 @@ export async function registerRoutes(
         date,
         deductionType: deductionType || "one_time",
         monthReference: monthReference || null,
-        createdBy: req.session.userId!,
+        createdBy: req.jwtUser!.userId,
       });
 
       await storage.addAuditLog({
         action: "deduction_create", entityType: "employee_deduction", entityId: deduction.id,
-        userId: req.session.userId!, userName: req.session.userName || "",
+        userId: req.jwtUser!.userId, userName: req.jwtUser?.userName || "",
         details: `إنشاء خصم بمبلغ ${amount} - ${reason}`,
         newValue: JSON.stringify({ amount, reason, deductionType: deductionType || "one_time" }),
       });
@@ -3241,7 +3214,7 @@ export async function registerRoutes(
         paymentMethod: method,
         referenceNo: referenceNo || null,
         branchId: branchId ? Number(branchId) : null,
-        paidBy: req.session.userId!,
+        paidBy: req.jwtUser!.userId,
         note: note || null,
       });
 
@@ -3255,7 +3228,7 @@ export async function registerRoutes(
         amount: payAmount,
         paymentMethod: method,
         branchId: empBranchId,
-        paidBy: req.session.userId!,
+        paidBy: req.jwtUser!.userId,
         month: run?.month || "",
         year: run?.year || 2026,
       });
@@ -3269,12 +3242,12 @@ export async function registerRoutes(
         refId: `SAL-${payment.id}`,
         category: "salary_payment",
         note: `دفع راتب ${emp?.name || ""} - ${run?.month}/${run?.year}${referenceNo ? ` | مرجع: ${referenceNo}` : ""}`,
-        createdBy: req.session.userId!,
+        createdBy: req.jwtUser!.userId,
       });
 
       await storage.addAuditLog({
         action: "salary_payment", entityType: "salary_payment", entityId: payment.id,
-        userId: req.session.userId!, userName: req.session.userName || "",
+        userId: req.jwtUser!.userId, userName: req.jwtUser?.userName || "",
         details: `دفعة راتب ${payAmount.toFixed(3)} للموظف ${emp?.name || employeeId} عبر ${method}`,
       });
 
@@ -3375,7 +3348,7 @@ export async function registerRoutes(
 
   app.post("/api/employees/:id/opening-balances", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
-      const user = await storage.getUser(req.session.userId!);
+      const user = await storage.getUser(req.jwtUser!.userId);
       if (!user || user.role !== "owner") return res.status(403).json({ message: "فقط المالك يمكنه تعديل الأرصدة الافتتاحية" });
       const { openingAdvanceBalance, openingPayableBalance } = req.body;
       const updated = await storage.updateUser(Number(req.params.id), {
@@ -3386,7 +3359,7 @@ export async function registerRoutes(
 
       await storage.addAuditLog({
         action: "opening_balance_update", entityType: "user", entityId: updated.id,
-        userId: req.session.userId!, userName: req.session.userName || "",
+        userId: req.jwtUser!.userId, userName: req.jwtUser?.userName || "",
         details: `تحديث أرصدة افتتاحية`,
         newValue: JSON.stringify({ openingAdvanceBalance, openingPayableBalance }),
       });
@@ -3408,7 +3381,7 @@ export async function registerRoutes(
       const updated = await storage.updateUser(Number(req.params.id), { employmentStatus });
       await storage.addAuditLog({
         action: "employment_status_change", entityType: "user", entityId: emp.id,
-        userId: req.session.userId!, userName: req.session.userName || "",
+        userId: req.jwtUser!.userId, userName: req.jwtUser?.userName || "",
         details: `تغيير حالة التوظيف من ${emp.employmentStatus} إلى ${employmentStatus}`,
         oldValue: emp.employmentStatus, newValue: employmentStatus,
       });
@@ -3504,7 +3477,7 @@ export async function registerRoutes(
         sourceType: sourceType || "manual",
         sourceId: sourceId || null,
         branchId: branchId || null,
-        createdBy: req.session.userId!,
+        createdBy: req.jwtUser!.userId,
         totalDebit: totalDebit.toFixed(3),
         totalCredit: totalCredit.toFixed(3),
         status: "draft",

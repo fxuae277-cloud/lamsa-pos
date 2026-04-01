@@ -6,48 +6,10 @@ import XLSX from "xlsx";
 import PDFDocument from "pdfkit";
 import path from "path";
 import fs from "fs";
+import { requireAuth, requireOwnerOrAdmin, enforceBranchScope } from "./middleware/auth";
 
 const FONT_PATH = path.join(process.cwd(), "server", "fonts", "Cairo-Regular.ttf");
 const hasArabicFont = fs.existsSync(FONT_PATH);
-
-function requireAuth(req: Request, res: Response, next: () => void) {
-  if (!req.session.userId) {
-    return res.status(401).json({ message: "غير مصرح" });
-  }
-  next();
-}
-
-async function requireOwnerOrAdmin(req: Request, res: Response, next: () => void) {
-  if (!req.session.userId) {
-    return res.status(401).json({ message: "غير مصرح" });
-  }
-  const user = await storage.getUser(req.session.userId);
-  if (!user || (user.role !== "owner" && user.role !== "admin")) {
-    return res.status(403).json({ message: "غير مصرح - صلاحيات غير كافية" });
-  }
-  next();
-}
-
-async function enforceBranchScope(req: Request, res: Response, next: () => void) {
-  if (!req.session.userId) {
-    return res.status(401).json({ message: "غير مصرح" });
-  }
-  const user = await storage.getUser(req.session.userId);
-  if (!user) {
-    return res.status(401).json({ message: "المستخدم غير موجود" });
-  }
-  if (user.role === "owner" || user.role === "admin") {
-    const qb = (req.query.branchId || req.query.branch_id) as string | undefined;
-    if (qb && !isNaN(Number(qb))) {
-      req.branchScope = { mode: "branch", branchId: Number(qb) };
-    } else {
-      req.branchScope = { mode: "company", branchId: null };
-    }
-  } else {
-    req.branchScope = { mode: "branch", branchId: user.branchId ?? 0 };
-  }
-  next();
-}
 
 function omr(val: string | number | null) {
   if (val === null || val === undefined) return "0.000";

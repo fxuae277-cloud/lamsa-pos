@@ -1,3 +1,4 @@
+import { getAuthHeaders } from "@/lib/queryClient";
 import { useState } from "react";
 import { FileSpreadsheet, Search, Eye, Printer, Download, X, Banknote, CreditCard, Building2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,7 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
   const { data: detail, isLoading } = useQuery<any>({
     queryKey: ["/api/sales", saleId],
     queryFn: async () => {
-      const res = await fetch(`/api/sales/${saleId}`, { credentials: "include" });
+      const res = await fetch(`/api/sales/${saleId}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(t("common.error"));
       return res.json();
     },
@@ -333,7 +334,7 @@ export default function Invoices() {
   const { data: allUsers = [] } = useQuery<User[]>({
     queryKey: ["/api/users"],
     queryFn: async () => {
-      const res = await fetch("/api/users", { credentials: "include" });
+      const res = await fetch("/api/users", { headers: getAuthHeaders() });
       if (!res.ok) return [];
       return res.json();
     },
@@ -347,7 +348,7 @@ export default function Invoices() {
   const { data: salesData = [], isLoading } = useQuery<any[]>({
     queryKey: ["sales-invoices", fromDate, toDate, paymentMethod, selectedBranch, selectedEmployee],
     queryFn: async () => {
-      const res = await fetch(queryUrl, { credentials: "include" });
+      const res = await fetch(queryUrl, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(t("common.error"));
       return res.json();
     },

@@ -1,3 +1,4 @@
+import { getAuthHeaders } from "@/lib/queryClient";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
@@ -376,7 +377,7 @@ function SupplierStatementDialog({ open, onOpenChange, supplierId }: { open: boo
   const { data: statement, isLoading } = useQuery<any>({
     queryKey: ["/api/suppliers", supplierId, "statement", { from, to }],
     queryFn: async () => {
-      const res = await fetch(`/api/suppliers/${supplierId}/statement?from=${from}&to=${to}`, { credentials: "include" });
+      const res = await fetch(`/api/suppliers/${supplierId}/statement?from=${from}&to=${to}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
@@ -569,7 +570,7 @@ function PurchasesTab() {
   const { data: activeSuppliers = [] } = useQuery<Supplier[]>({
     queryKey: ["/api/suppliers", "activeOnly"],
     queryFn: async () => {
-      const res = await fetch("/api/suppliers?activeOnly=true", { credentials: "include" });
+      const res = await fetch("/api/suppliers?activeOnly=true", { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
@@ -583,7 +584,7 @@ function PurchasesTab() {
   const { data: productVariants = [] } = useQuery<ProductVariant[]>({
     queryKey: ["/api/products", addProductId, "variants"],
     queryFn: async () => {
-      const res = await fetch(`/api/products/${addProductId}/variants`, { credentials: "include" });
+      const res = await fetch(`/api/products/${addProductId}/variants`, { headers: getAuthHeaders() });
       if (!res.ok) return [];
       return res.json();
     },
@@ -593,7 +594,7 @@ function PurchasesTab() {
   const { data: invoiceDetail } = useQuery<any>({
     queryKey: ["/api/purchases", selectedInvoice],
     queryFn: async () => {
-      const res = await fetch(`/api/purchases/${selectedInvoice}`, { credentials: "include" });
+      const res = await fetch(`/api/purchases/${selectedInvoice}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
@@ -805,7 +806,7 @@ function PurchasesTab() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const uploadRes = await fetch(`/api/purchases/${selectedInvoice}/invoice-image`, { method: "POST", body: formData, credentials: "include" });
+      const uploadRes = await fetch(`/api/purchases/${selectedInvoice}/invoice-image`, { method: "POST", body: formData, headers: getAuthHeaders() });
       const uploadData = await uploadRes.json();
       if (!uploadData.ok) {
         setOcrError({ stage: uploadData.stage || "upload", error: uploadData.error || "فشل الرفع" });
@@ -937,7 +938,7 @@ function PurchasesTab() {
 
       if (item.code) {
         try {
-          const skuRes = await fetch(`/api/variants/barcode/${encodeURIComponent(item.code)}`, { credentials: "include" });
+          const skuRes = await fetch(`/api/variants/barcode/${encodeURIComponent(item.code)}`, { headers: getAuthHeaders() });
           if (skuRes.ok) {
             const v = await skuRes.json();
             variantId = v.id;
@@ -1061,7 +1062,7 @@ function PurchasesTab() {
                     </Select>
                     <BarcodeScanButton onScan={async (barcode) => {
                       try {
-                        const res = await fetch(`/api/variants/barcode/${barcode}`, { credentials: "include" });
+                        const res = await fetch(`/api/variants/barcode/${barcode}`, { headers: getAuthHeaders() });
                         if (res.ok) {
                           const variant = await res.json();
                           setAddProductId(String(variant.productId));

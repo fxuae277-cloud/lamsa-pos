@@ -1,3 +1,4 @@
+import { getAuthHeaders } from "@/lib/queryClient";
 import { useState } from "react";
 import { Plus, Search, MapPin, Phone, MessageCircle, Eye, Clock, Package, CheckCircle2, XCircle, ChefHat, Truck, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -50,7 +51,7 @@ export default function Orders() {
     queryKey,
     queryFn: async () => {
       const url = branchFilter !== "all" ? `/api/orders?branchId=${branchFilter}` : "/api/orders";
-      const res = await fetch(url, { credentials: "include" });
+      const res = await fetch(url, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to load orders");
       return res.json();
     },
@@ -119,7 +120,7 @@ export default function Orders() {
     setDetailLoading(true);
     setDetailOpen(true);
     try {
-      const res = await fetch(`/api/orders/${orderId}`, { credentials: "include" });
+      const res = await fetch(`/api/orders/${orderId}`, { headers: getAuthHeaders() });
       const data = await res.json();
       setDetailOrder(data);
     } catch {

@@ -1,3 +1,4 @@
+import { getAuthHeaders } from "@/lib/queryClient";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PackageSearch, Boxes, TrendingDown, AlertTriangle, Search } from "lucide-react";
@@ -46,7 +47,7 @@ export default function InventoryOverview() {
       if (movType !== "all") params.set("type", movType);
       if (movFrom) params.set("from", movFrom);
       if (movTo) params.set("to", movTo);
-      const res = await fetch(`/api/inventory/transactions?${params}`, { credentials: "include" });
+      const res = await fetch(`/api/inventory/transactions?${params}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },

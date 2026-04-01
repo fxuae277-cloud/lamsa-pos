@@ -1,3 +1,4 @@
+import { getAuthHeaders } from "@/lib/queryClient";
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -50,7 +51,7 @@ export default function ExecutivePlus() {
   const { data, isLoading, error } = useQuery<any>({
     queryKey: ["/api/dashboard/executive-plus", branchId],
     queryFn: async () => {
-      const res = await fetch(`/api/dashboard/executive-plus${qs}`, { credentials: "include" });
+      const res = await fetch(`/api/dashboard/executive-plus${qs}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || `${res.status}`);
       return res.json();
     },

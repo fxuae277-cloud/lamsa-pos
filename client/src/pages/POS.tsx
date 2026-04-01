@@ -1,3 +1,4 @@
+import { getAuthHeaders } from "@/lib/queryClient";
 import { useState, useRef, useEffect } from "react";
 import { Search, Plus, Minus, Trash2, CheckCircle2, Image as ImageIcon, Store, Monitor, Banknote, LogOut, User as UserIcon, XCircle, Clock, AlertTriangle, Printer, ArrowLeft, Receipt, TrendingUp, TrendingDown, Camera, Pause, Play, ShoppingCart, MessageSquare } from "lucide-react";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
@@ -34,7 +35,7 @@ function StartPOS({ branchName, terminalName, userName, onShiftOpened }: {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/shifts/current", { credentials: "include" });
+        const res = await fetch("/api/shifts/current", { headers: getAuthHeaders() });
         const data = await res.json();
         if (data.shift) {
           onShiftOpened(data.shift);
@@ -528,7 +529,7 @@ export default function POS() {
   const prepareCloseShift = async () => {
     if (!currentShift) return;
     try {
-      const reportRes = await fetch(`/api/reports/shift?shiftId=${currentShift.id}`, { credentials: "include" });
+      const reportRes = await fetch(`/api/reports/shift?shiftId=${currentShift.id}`, { headers: getAuthHeaders() });
       const reportData = await reportRes.json();
       setPreCloseData(reportData);
       setPendingOrders([]);
@@ -551,7 +552,7 @@ export default function POS() {
     onSuccess: async (closedShift: Shift) => {
       setCloseDialogOpen(false);
       try {
-        const reportRes = await fetch(`/api/reports/shift?shiftId=${closedShift.id}`, { credentials: "include" });
+        const reportRes = await fetch(`/api/reports/shift?shiftId=${closedShift.id}`, { headers: getAuthHeaders() });
         const reportData = await reportRes.json();
         setClosedReport(reportData);
       } catch {
@@ -580,7 +581,7 @@ export default function POS() {
     if (isOwner && !currentShift && !closedReport) {
       (async () => {
         try {
-          const res = await fetch("/api/shifts/current", { credentials: "include" });
+          const res = await fetch("/api/shifts/current", { headers: getAuthHeaders() });
           const data = await res.json();
           if (data.shift) {
             setCurrentShift(data.shift);

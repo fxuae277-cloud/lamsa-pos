@@ -1,3 +1,4 @@
+import { getAuthHeaders } from "@/lib/queryClient";
 import { useState } from "react";
 import { Banknote, Building2, ArrowDownCircle, ArrowUpCircle, Calculator, Clock, TrendingUp, TrendingDown, AlertTriangle, Calendar, Hash } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -59,22 +60,22 @@ export default function Finance() {
 
   const { data: cashEntries = [] } = useQuery<CashLedger[]>({
     queryKey: ["/api/cash-ledger", selectedDate, selectedBranch],
-    queryFn: () => fetch(`/api/cash-ledger?date=${selectedDate}${branchIdParam}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`/api/cash-ledger?date=${selectedDate}${branchIdParam}`, { headers: getAuthHeaders() }).then(r => r.json()),
   });
 
   const { data: bankEntries = [] } = useQuery<BankLedger[]>({
     queryKey: ["/api/bank-ledger", selectedDate, selectedBranch],
-    queryFn: () => fetch(`/api/bank-ledger?date=${selectedDate}${branchIdParam}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`/api/bank-ledger?date=${selectedDate}${branchIdParam}`, { headers: getAuthHeaders() }).then(r => r.json()),
   });
 
   const { data: summary } = useQuery<any>({
     queryKey: ["/api/cash-ledger/summary", selectedDate, selectedBranch],
-    queryFn: () => fetch(`/api/cash-ledger/summary?date=${selectedDate}${branchIdParam}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`/api/cash-ledger/summary?date=${selectedDate}${branchIdParam}`, { headers: getAuthHeaders() }).then(r => r.json()),
   });
 
   const { data: closedShifts = [] } = useQuery<any[]>({
     queryKey: ["/api/shifts/closed", selectedDate, selectedBranch],
-    queryFn: () => fetch(`/api/shifts/closed?date=${selectedDate}${branchIdParam}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`/api/shifts/closed?date=${selectedDate}${branchIdParam}`, { headers: getAuthHeaders() }).then(r => r.json()),
   });
 
   const depositMutation = useMutation({

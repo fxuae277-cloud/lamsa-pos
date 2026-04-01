@@ -1,26 +1,13 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Express } from "express";
 import { pool } from "./db";
 import { storage } from "./storage";
-
-function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.userId) return res.status(401).json({ message: "غير مصرح" });
-  next();
-}
-
-async function requireOwnerOrAdmin(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.userId) return res.status(401).json({ message: "غير مصرح" });
-  const user = await storage.getUser(req.session.userId);
-  if (!user || (user.role !== "owner" && user.role !== "admin")) {
-    return res.status(403).json({ message: "غير مصرح - صلاحيات غير كافية" });
-  }
-  next();
-}
+import { requireAuth, requireOwnerOrAdmin } from "./middleware/auth";
 
 export function registerMobileRoutes(app: Express) {
 
   app.get("/api/mobile/employee/home", requireAuth, async (req, res) => {
     try {
-      const userId = req.session.userId!;
+      const userId = req.jwtUser!.userId;
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "مستخدم غير موجود" });
 
@@ -161,7 +148,7 @@ export function registerMobileRoutes(app: Express) {
 
   app.get("/api/mobile/my-invoices", requireAuth, async (req, res) => {
     try {
-      const userId = req.session.userId!;
+      const userId = req.jwtUser!.userId;
       const result = await pool.query(
         `SELECT s.*, b.name as branch_name FROM sales s
          LEFT JOIN branches b ON s.branch_id = b.id
@@ -177,7 +164,7 @@ export function registerMobileRoutes(app: Express) {
 
   app.post("/api/mobile/shift/open", requireAuth, async (req, res) => {
     try {
-      const userId = req.session.userId!;
+      const userId = req.jwtUser!.userId;
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "مستخدم غير موجود" });
 
@@ -199,7 +186,7 @@ export function registerMobileRoutes(app: Express) {
 
   app.post("/api/mobile/shift/close", requireAuth, async (req, res) => {
     try {
-      const userId = req.session.userId!;
+      const userId = req.jwtUser!.userId;
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "مستخدم غير موجود" });
 
