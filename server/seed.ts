@@ -48,58 +48,78 @@ async function ensureBranch() {
   return branch;
 }
 
+/**
+ * Upsert a guaranteed user: creates if missing, refreshes password hash if exists.
+ * Safe to call on every startup and on Railway one-off runs.
+ */
+async function guaranteedUpsertUser(opts: {
+  username: string;
+  plainPassword: string;
+  name: string;
+  role: string;
+  terminalName: string;
+}) {
+  const { username, plainPassword, name, role, terminalName } = opts;
+
+  const existing = await db.select().from(users).where(eq(users.username, username)).limit(1);
+  const hashed = await hashPassword(plainPassword);
+
+  if (existing.length > 0) {
+    const user = existing[0];
+    await db
+      .update(users)
+      .set({ password: hashed, role, isActive: true })
+      .where(eq(users.username, username));
+    console.log(`[seed] UPDATED  | username=${username} | role=${role} | id=${user.id} | hash_refreshed=true`);
+  } else {
+    const branch = await ensureBranch();
+    await db.insert(users).values({
+      username,
+      password: hashed,
+      name,
+      role,
+      branchId: branch.id,
+      terminalName,
+      isActive: true,
+    });
+    console.log(`[seed] CREATED  | username=${username} | role=${role} | hash_refreshed=true`);
+  }
+}
+
 export async function seedAdminUser() {
-  // Idempotent: skip if admin already exists
-  const existing = await db.select().from(users).where(eq(users.username, "admin")).limit(1);
-  if (existing.length > 0) return;
-
-  console.log("Admin user not found. Creating default admin...");
-  const branch = await ensureBranch();
-
-  const hashed = await hashPassword("123456");
-  await db.insert(users).values({
+  await guaranteedUpsertUser({
     username: "admin",
-    password: hashed,
+    plainPassword: "123456",
     name: "Admin",
     role: "admin",
-    branchId: branch.id,
     terminalName: "POS-1",
-    isActive: true,
   });
-
-  console.log("Default admin created: username=admin, password=123456");
 }
 
 export async function seedAhmedUser() {
-  // Idempotent: skip if ahmed already exists
-  const existing = await db.select().from(users).where(eq(users.username, "ahmed")).limit(1);
-  if (existing.length > 0) {
-    const ahmed = existing[0];
-    console.log(`[seed] ahmed found: id=${ahmed.id} role=${ahmed.role} isActive=${ahmed.isActive} hashPrefix=${ahmed.password.slice(0, 7)}`);
-    return;
-  }
-
-  console.log("[seed] ahmed not found — creating now");
-  const branch = await ensureBranch();
-
-  const hashed = await hashPassword("owner123");
-  await db.insert(users).values({
+  await guaranteedUpsertUser({
     username: "ahmed",
-    password: hashed,
+    plainPassword: "owner123",
     name: "أحمد",
     role: "owner",
-    branchId: branch.id,
     terminalName: "POS-2",
-    isActive: true,
   });
+}
 
-  console.log("[seed] ahmed created: username=ahmed password=owner123");
+/**
+ * Guaranteed production seed — run at startup or manually via:
+ *   railway run npm run seed:admin
+ */
+export async function guaranteedProductionSeed() {
+  console.log("[seed] Running guaranteed production seed against DATABASE_URL...");
+  await seedAdminUser();
+  await seedAhmedUser();
+  console.log("[seed] Guaranteed production seed complete.");
 }
 
 export async function seedDatabase() {
   await bootstrapOwner();
-  await seedAdminUser();
-  await seedAhmedUser();
+  await guaranteedProductionSeed();
   await bootstrapLocations();
 
   const existingBranches = await db.select().from(branches);

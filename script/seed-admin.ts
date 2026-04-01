@@ -1,13 +1,21 @@
 /**
- * Standalone admin + debug-user seed script.
- * Ensures the default admin and ahmed users exist. Safe to run multiple times.
+ * Guaranteed production seed script.
  *
- * Local:   npm run seed:admin
- * Railway: railway run npm run seed:admin
+ * - Creates admin/ahmed if they don't exist.
+ * - Updates their password hash if they do exist.
+ * - Connects via DATABASE_URL — works against Railway's live Postgres.
+ * - Safe to run multiple times (idempotent upsert).
+ *
+ * Usage:
+ *   Local:   npm run seed:admin
+ *   Railway: railway run npm run seed:admin
  */
 
-import { seedAdminUser, seedAhmedUser } from "../server/seed";
+import { guaranteedProductionSeed } from "../server/seed";
+import { pool } from "../server/db";
 
-await seedAdminUser();
-await seedAhmedUser();
-process.exit(0);
+try {
+  await guaranteedProductionSeed();
+} finally {
+  await pool.end();
+}
