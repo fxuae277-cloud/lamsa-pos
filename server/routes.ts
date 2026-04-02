@@ -104,8 +104,11 @@ export async function registerRoutes(
 
     logger.info("login_attempt", { username, ip: req.ip });
 
-    const user = await storage.getUserByUsername(username);
-    if (!user) {
+      const user = await storage.getUserByUsername(username);
+
+      console.log("LOGIN USER FROM DB:", user);
+
+      if (!user) {
       logger.warn("failed_login", {
         username,
         reason: "user_not_found",
