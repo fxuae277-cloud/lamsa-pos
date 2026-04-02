@@ -160,12 +160,20 @@ export async function registerRoutes(
 
     const hash = await bcrypt.hash("123456", 10);
 
-    await db
+    const updated = await db
       .update(users)
       .set({ password: hash })
-      .where(eq(users.username, "admin"));
+      .where(eq(users.username, "admin"))
+      .returning({
+        id: users.id,
+        username: users.username,
+      });
 
-    res.json({ success: true });
+    res.json({
+      success: true,
+      updatedCount: updated.length,
+      updated,
+    });
   });
 
   app.post("/api/auth/logout", (_req, res) => {
