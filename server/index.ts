@@ -9,6 +9,8 @@ import { apiLimiter } from "./middleware/rateLimiter";
 import { globalErrorHandler } from "./middleware/errorHandler";
 import { logger } from "./logger";
 
+console.log("MIMO KEY:", process.env.MIMO_API_KEY ? "FOUND" : "MISSING");
+
 const app = express();
 app.set("trust proxy", 1);
 const httpServer = createServer(app);
