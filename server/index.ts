@@ -10,6 +10,7 @@ import { globalErrorHandler } from "./middleware/errorHandler";
 import { logger } from "./logger";
 
 const app = express();
+app.set("trust proxy", 1);
 const httpServer = createServer(app);
 
 declare module "http" {

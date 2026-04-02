@@ -120,23 +120,25 @@ export function PayrollProvider({ children }: { children: ReactNode }) {
 
   // ── Queries ──────────────────────────────────────────────────────────────
 
+  const safeArray = (d: any) => (Array.isArray(d) ? d : []);
+
   const { data: rawEmployees = [], isLoading: loadingEmp } = useQuery<any[]>({
     queryKey: ["payroll-employees"],
-    queryFn: () => fetch("/api/payroll/ui/employees").then((r) => r.json()),
+    queryFn: () => fetch("/api/payroll/ui/employees").then((r) => r.json()).then(safeArray),
     staleTime: 5 * 60 * 1000,
   });
 
   const { data: rawMovements = [], isLoading: loadingMov } = useQuery<any[]>({
     queryKey: ["payroll-movements", selectedMonth, selectedYear],
     queryFn: () =>
-      fetch(`/api/payroll/ui/movements?month=${selectedMonth}&year=${selectedYear}`).then((r) => r.json()),
+      fetch(`/api/payroll/ui/movements?month=${selectedMonth}&year=${selectedYear}`).then((r) => r.json()).then(safeArray),
     staleTime: 60 * 1000,
   });
 
   const { data: rawPayments = [], isLoading: loadingPay } = useQuery<any[]>({
     queryKey: ["payroll-payments", selectedMonth, selectedYear],
     queryFn: () =>
-      fetch(`/api/payroll/ui/payments?month=${selectedMonth}&year=${selectedYear}`).then((r) => r.json()),
+      fetch(`/api/payroll/ui/payments?month=${selectedMonth}&year=${selectedYear}`).then((r) => r.json()).then(safeArray),
     staleTime: 60 * 1000,
   });
 
