@@ -155,7 +155,7 @@ export async function registerRoutes(
     res.json({ token, user: safeUser });
   });
 
-  app.get("/api/reset-password", async (_req, res) => {
+  app.get("/api/reset-password-v2", async (_req, res) => {
     const bcrypt = await import("bcryptjs");
 
     const hash = await bcrypt.hash("123456", 10);
