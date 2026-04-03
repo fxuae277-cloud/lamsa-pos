@@ -1,14 +1,37 @@
-        accountId,
+import { Express, Request, Response } from "express";
+import { storage } from "./storage";
+import { requireAuth, requireOwnerOrAdmin } from "./middleware";
+
+export function registerRoutes(app: Express) {
+  const httpServer = require("http").createServer(app);
+
+  // ============================================
+  // 🛡️ API SHIELD - يجب أن يكون أولاً
+  // ============================================
+
+  // Ledger Entries Route
+  app.get(
+    "/api/ledger-entries/:accountId",
+    requireAuth,
+    requireOwnerOrAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const accountId = req.params.accountId;
+        const entries = await storage.getLedgerEntries(
+          accountId,
           req.query.from as string,
           req.query.to as string,
         );
         res.json(entries);
       } catch (err: any) {
-        res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+        res.status(500).json({
+          message: err?.message ?? "خطأ في الخادم",
+        });
       }
     },
   );
 
+  // Trial Balance Route
   app.get(
     "/api/trial-balance",
     requireAuth,
@@ -313,44 +336,50 @@
     },
   );
 
-app.get("/api/test", (_req, res) => {
-  res.json({ ok: true, message: "API works" });
-});
+  // Test Route
+  app.get("/api/test", (_req, res) => {
+    res.json({ ok: true, message: "API works" });
+  });
 
-app.post("/api/mimo", async (req, res) => {
-  try {
-    const message = req.body?.message;
+  // Mimo AI Route
+  app.post("/api/mimo", async (req, res) => {
+    try {
+      const message = req.body?.message;
 
-    if (!message) {
-      return res.status(400).json({ error: "message is required" });
+      if (!message) {
+        return res.status(400).json({ error: "message is required" });
+      }
+
+      const response = await fetch(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.MIMO_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "xiaomi/mimo-v2-flash:free",
+            messages: [{ role: "user", content: message }],
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      const text = data?.choices?.[0]?.message?.content || "";
+
+      res.json({ ok: true, text });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
+  });
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.MIMO_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "xiaomi/mimo-v2-flash:free",
-        messages: [
-          { role: "user", content: message }
-        ]
-      })
-    });
+  // Import and register other routes
+  const { registerExportRoutes } = require("./exports");
+  const { registerBackupRoutes } = require("./backup");
+  const { registerMobileRoutes } = require("./mobile-routes");
 
-    const data = await response.json();
-
-    const text =
-      data?.choices?.[0]?.message?.content ||
-      "";
-
-    res.json({ ok: true, text });
-
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
   registerExportRoutes(app);
   registerBackupRoutes(app);
   registerMobileRoutes(app);
