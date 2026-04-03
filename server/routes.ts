@@ -96,28 +96,19 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express,
 ): Promise<Server> {
+  
+  console.log("🚀 registerRoutes تم تشغيله - جاري تسجيل جميع الـ routes");
+
+  // ROUTE الاختبار الحاسم
+  app.get("/api/health-777", (_req, res) => {
+    console.log("✅ تم الوصول إلى /api/health-777 من Railway");
+    res.type("text/plain").send("HEALTH_777_OK_FROM_RUNTIME");
+  });
+  
   app.get("/api/reset-password-v2", async (_req, res) => {
     const bcrypt = await import("bcryptjs");
 
-    const hash = await bcrypt.hash("123456", 10);
-
-    const updated = await db
-      .update(users)
-      .set({ password: hash })
-      .where(eq(users.username, "admin"))
-      .returning({
-        id: users.id,
-        username: users.username,
-      });
-
-    res.json({
-      success: true,
-      updatedCount: updated.length,
-      updated,
-    });
-  });
-
-  app.post("/api/auth/login", authLimiter, async (req, res) => {
+    app.post("/api/auth/login", authLimiter, async (req, res) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success)
       return res.status(400).json({ message: formatZodError(parsed.error) });
