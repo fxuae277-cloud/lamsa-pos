@@ -64,7 +64,27 @@ app.use((req, res, next) => {
   initBackupScheduler();
 
   app.use(globalErrorHandler);
+  await registerRoutes(httpServer, app);
+  initBackupScheduler();
 
+  app.use(globalErrorHandler);
+
+  // === حماية API Routes من catch-all ===
+  app.use("/api", (req, res) => {
+    res.status(404).json({
+      error: "API_ROUTE_NOT_FOUND",
+      path: req.path,
+      
+      method: req.method,
+    });
+  });
+
+  if (process.env.NODE_ENV === "production") {
+    serveStatic(app);
+  } else {
+    const { setupVite } = await import("./vite");
+    await setupVite(httpServer, app);
+  }
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
