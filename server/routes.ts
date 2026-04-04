@@ -1,5 +1,8 @@
 import { Express, Request, Response } from "express";
 import { storage } from "./storage";
+import { registerExportRoutes } from "./exports";
+import { registerBackupRoutes } from "./backup";
+import { registerMobileRoutes } from "./mobile-routes";
 
 // ✅ التوقيع الصحيح: (httpServer, app)
 export function registerRoutes(httpServer: any, app: Express) {
@@ -319,11 +322,6 @@ export function registerRoutes(httpServer: any, app: Express) {
       res.status(500).json({ error: error.message });
     }
   });
-
-  // Import and register other routes
-  const { registerExportRoutes } = require("./exports");
-  const { registerBackupRoutes } = require("./backup");
-  const { registerMobileRoutes } = require("./mobile-routes");
 
   registerExportRoutes(app);
   registerBackupRoutes(app);
