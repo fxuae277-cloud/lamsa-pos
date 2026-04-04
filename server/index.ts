@@ -9,8 +9,6 @@ import { apiLimiter } from "./middleware/rateLimiter";
 import { globalErrorHandler } from "./middleware/errorHandler";
 import { logger } from "./logger";
 
-console.log("MIMO KEY:", process.env.MIMO_API_KEY ? "FOUND" : "MISSING");
-
 const app = express();
 app.set("trust proxy", 1);
 const httpServer = createServer(app);
@@ -76,6 +74,15 @@ app.use((req, res, next) => {
   }
 
   const port = parseInt(process.env.PORT || "5000", 10);
+
+  const shutdown = () => {
+    httpServer.closeAllConnections?.();
+    httpServer.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 3000).unref();
+  };
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT",  shutdown);
+
   httpServer.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
     logger.info(`serving on port ${port}`);
   });
