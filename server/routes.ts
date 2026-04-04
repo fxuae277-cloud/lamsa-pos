@@ -1,13 +1,8 @@
-// server/routes.ts - النسخة المُصححة
-
 import { Express, Request, Response } from "express";
-import { storage } from "./storage.ts";
+import { storage } from "./storage";
 
-// ✅ تغيير التوقيع ليتطابق مع index.ts
+// ✅ التوقيع الصحيح: (httpServer, app)
 export function registerRoutes(httpServer: any, app: Express) {
-  // ❌ لا تُنشئ httpServer هنا - فهو مُمرر من index.ts
-  // const httpServer = require("http").createServer(app); // احذف هذا
-
   // ============================================
   // Ledger Entries Route
   // ============================================
@@ -24,9 +19,7 @@ export function registerRoutes(httpServer: any, app: Express) {
         );
         res.json(entries);
       } catch (err: any) {
-        res.status(500).json({
-          message: err?.message ?? "خطأ في الخادم",
-        });
+        res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
       }
     },
   );
@@ -281,7 +274,7 @@ export function registerRoutes(httpServer: any, app: Express) {
       if (table === "employee_advances") {
         result = await storage.settleAdvance(Number(id), 0);
       } else {
-        const { pool: dbPool } = await import("./db.ts");
+        const { pool: dbPool } = await import("./db");
         const r = await dbPool.query(
           `UPDATE ${table} SET status = 'cancelled' WHERE id = $1 RETURNING *`,
           [Number(id)],
@@ -303,10 +296,8 @@ export function registerRoutes(httpServer: any, app: Express) {
   app.post("/api/mimo", async (req, res) => {
     try {
       const message = req.body?.message;
-      if (!message) {
+      if (!message)
         return res.status(400).json({ error: "message is required" });
-      }
-
       const response = await fetch(
         "https://openrouter.ai/api/v1/chat/completions",
         {
@@ -321,7 +312,6 @@ export function registerRoutes(httpServer: any, app: Express) {
           }),
         },
       );
-
       const data = await response.json();
       const text = data?.choices?.[0]?.message?.content || "";
       res.json({ ok: true, text });
@@ -331,14 +321,13 @@ export function registerRoutes(httpServer: any, app: Express) {
   });
 
   // Import and register other routes
-  const { registerExportRoutes } = require("./exports.ts");
-  const { registerBackupRoutes } = require("./backup.ts");
-  const { registerMobileRoutes } = require("./mobile-routes.ts");
+  const { registerExportRoutes } = require("./exports");
+  const { registerBackupRoutes } = require("./backup");
+  const { registerMobileRoutes } = require("./mobile-routes");
 
   registerExportRoutes(app);
   registerBackupRoutes(app);
   registerMobileRoutes(app);
 
-  // ✅ أعد httpServer كما هو (بدون تعديل)
   return httpServer;
 }
