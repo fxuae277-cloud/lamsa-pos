@@ -58,30 +58,16 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // 1. تشغيل المigrations والـ seed
   await runMigrations();
   await seedDatabase();
 
-  // 2. تسجيل الـ Routes (مرة واحدة فقط!)
   await registerRoutes(httpServer, app);
-
-  // 3. تشغيل الـ Backup Scheduler (مرة واحدة فقط!)
   initBackupScheduler();
 
-  // 4. Error Handler (مرة واحدة فقط!)
   app.use(globalErrorHandler);
 
-  // 5. 🛡️ حماية API Routes من catch-all
-  app.use("/api", (req, res, next) => {
-    if (req.route) return next();
-    res.status(404).json({
-      error: "API_ROUTE_NOT_FOUND",
-      path: req.path,
-      method: req.method,
-    });
-  });
+  // ✅ لا تضف app.use("/api", ...) هنا - فهو موجود في static.ts
 
-  // 6. إعداد Static files أو Vite (مرة واحدة فقط!)
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
@@ -89,16 +75,8 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // 7. تشغيل السيرفر
   const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
-      logger.info(`serving on port ${port}`);
-    },
-  );
+  httpServer.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
+    logger.info(`serving on port ${port}`);
+  });
 })();
